@@ -23,30 +23,43 @@ public class Balance
     {
         double avgSpentPerUser = GetAvgSpentPerUser(_group.Expenses, _group.Users.Count);
         var totalPaidPerUser = GetTotalPaidPerUser(_group.Expenses, _group.Users);
-
-        var allDebtors = _group.Users.Where(user => totalPaidPerUser[user] < avgSpentPerUser).ToHashSet();
-        var borrowers = _group.Users.Except(allDebtors).ToHashSet(); //These users are those that have borrowed money besides paying their share of expenses.
-
-        var totalOwedPerDebtor = allDebtors.ToDictionary(debtor => debtor, debtor => avgSpentPerUser - totalPaidPerUser[debtor]); //The owed amount will be positive
-        var totalLentPerBorrower = borrowers.ToDictionary(borrower => borrower, borrower => totalPaidPerUser[borrower] - avgSpentPerUser); //The lent amount will be positive
+        var totalOwedPerDebtor = GetTotalOwedPerDebtor(avgSpentPerUser, totalPaidPerUser, _group.Users);
+        var totalLentPerBorrower = GetTotalLentPerBorrower(avgSpentPerUser, totalPaidPerUser, totalOwedPerDebtor, _group.Users);
 
         //Now we split the bill between those that owe and the borrowers.
-        var payments = GetSettlePayments(totalOwedPerDebtor, totalLentPerBorrower);
+        var settlementPayments = GetSettlementPayments(totalOwedPerDebtor, totalLentPerBorrower);
 
         //We remove from the payments the settlement transactions (if any)
-        if (_group.Transactions.Count > 0)
-        {
-            var paymentsFromTransactions = _group.Transactions.Select(transaction => transaction.Payment).ToList();
-            payments.RemoveAll(payment => paymentsFromTransactions.Contains(payment));
-        }
+        RemovePaidTransactionsFromSettlementPayments(_group.Transactions, settlementPayments);
 
-        _settlePaymentsPerUser = payments.GroupBy(payment => payment.Payer).ToDictionary(grouping => grouping.Key, grouping => grouping.ToList());
+        _settlePaymentsPerUser = settlementPayments.GroupBy(payment => payment.Payer).ToDictionary(grouping => grouping.Key, grouping => grouping.ToList());
+    }
+
+    private static void RemovePaidTransactionsFromSettlementPayments(ICollection<Transaction> transactions, List<Payment> settlementPayments)
+    {
+        if (transactions.Count > 0)
+        {
+            var paymentsFromTransactions = transactions.Select(transaction => transaction.Payment).ToList();
+            settlementPayments.RemoveAll(payment => paymentsFromTransactions.Contains(payment));
+        }
+    }
+
+    private static Dictionary<User, double> GetTotalLentPerBorrower(double avgSpentPerUser, Dictionary<User, double> totalPaidPerUser, Dictionary<User, double> totalOwedPerDebtor, ICollection<User> users)
+    {
+        var borrowers = users.Except(totalOwedPerDebtor.Keys).ToHashSet(); //These users are those that have borrowed money besides paying their share of expenses.
+        return borrowers.ToDictionary(borrower => borrower, borrower => totalPaidPerUser[borrower] - avgSpentPerUser);  //The lent amount will be positive
+
+    }
+
+    private static Dictionary<User, double> GetTotalOwedPerDebtor(double avgSpentPerUser, Dictionary<User, double> totalPaidPerUser, ICollection<User> users)
+    {
+        var allDebtors = users.Where(user => totalPaidPerUser[user] < avgSpentPerUser).ToHashSet();
+        return allDebtors.ToDictionary(debtor => debtor, debtor => avgSpentPerUser - totalPaidPerUser[debtor]);    //The owed amount will be positive
     }
 
     private static Dictionary<User, double> GetTotalPaidPerUser(ICollection<Expense> expenses, ICollection<User> users)
     {
         var expensesPaidPerUser = expenses.GroupBy(expense => expense.PaidBy).ToDictionary(grouping => grouping.Key, grouping => grouping.ToList());
-
         var totalPaidPerUser = expensesPaidPerUser.ToDictionary(pair => pair.Key, pair => pair.Value.Sum(x => x.Amount));
 
         //Now we find out those that have not paid anything and we add them to 'totalPaidPerUser' with amount 0.
@@ -55,7 +68,7 @@ public class Balance
         return totalPaidPerUser;
     }
 
-    private static List<Payment> GetSettlePayments(Dictionary<User, double> totalOwedPerDebtor, Dictionary<User, double> totalLentPerBorrower)
+    private static List<Payment> GetSettlementPayments(Dictionary<User, double> totalOwedPerDebtor, Dictionary<User, double> totalLentPerBorrower)
     {
         var payments = new List<Payment>();
         //We try to minimize transactions by sorting the debtors.
