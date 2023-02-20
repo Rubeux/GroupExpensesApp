@@ -35,7 +35,7 @@ public class GroupService : IGroupService
         var group = GetGroup(groupId);
         if (group == null) return false;
 
-        group.AddTransaction(payment);
+        group.AddSettlementTransaction(payment);
         return true;
     }
 

@@ -20,6 +20,7 @@ public class Group
     private readonly ConcurrentDictionary<Guid, Expense> _expenses = new(); //This is thread safe
     private readonly List<Transaction> _transactions = new();
     private readonly Balance _balance;
+    private bool _readyForSettlement = false;
 
     private readonly object _lock = new();
 
@@ -35,48 +36,47 @@ public class Group
     //TODO make these methods to return something in case of exception
     public void AddExpense(Expense expense)
     {
-        if (expense != null)
+        //TODO throw Exception if _readyForSettlement == true
+        if (expense != null && !_readyForSettlement)
         {
-            _expenses.AddOrUpdate(expense.Id, expense, (key, value) => expense);
-            UpdateBalance();
+            lock (_lock)
+            {
+                _expenses.AddOrUpdate(expense.Id, expense, (key, value) => expense);
+                _balance.Update();
+            }
         }
     }
 
     public void RemoveExpense(Expense expense)
     {
-        if (expense != null)
+        //TODO throw Exception if _readyForSettlement == true
+        if (expense != null && !_readyForSettlement)
         {
-            _expenses.Remove(expense.Id, out _);
-            UpdateBalance();
+            lock (_lock)
+            {
+                _expenses.Remove(expense.Id, out _);
+                _balance.Update();
+            }
         }
     }
 
-    public void AddTransaction(Payment payment)
+    public void AddSettlementTransaction(Payment payment)
     {
-        if (payment != null)
+        lock (_lock)
         {
-            _transactions.Add(new Transaction()
+            _readyForSettlement = true;
+            var availableSettlementPayments = GetSettlementPayments();
+            if (payment != null && availableSettlementPayments[payment.Payer].Contains(payment))
             {
-                Amount = payment.Amount,
-                Payer = payment.Payer,
-                Receiver = payment.Receiver,
-            });
-
-            UpdateBalance();
+                _transactions.Add(new Transaction(payment));
+                _balance.Update();
+            }
         }
     }
 
     public ReadOnlyDictionary<User, List<Payment>> GetSettlementPayments()
     {
         return _balance.SettlePaymentsPerUser;
-    }
-
-    private void UpdateBalance()
-    {
-        lock (_lock)
-        {
-            _balance.Update();
-        }
     }
 
 }

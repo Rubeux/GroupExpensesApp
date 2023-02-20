@@ -5,7 +5,7 @@ namespace GroupExpensesApp.Models;
 
 public class User
 {
-    public readonly Guid Id = Guid.NewGuid();
+    protected readonly Guid Id = Guid.NewGuid();
 
     public string Name { get; set; }
 
