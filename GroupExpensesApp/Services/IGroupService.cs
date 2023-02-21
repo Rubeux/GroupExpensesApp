@@ -9,7 +9,7 @@ public interface IGroupService
 {
     public Group CreateGroup(string name, List<User> Users);
 
-    public Group? GetGroup(Guid groupId);
+    public Group GetGroup(Guid groupId);
 
     public bool AddExpense(Guid groupId, Expense expense);
 
