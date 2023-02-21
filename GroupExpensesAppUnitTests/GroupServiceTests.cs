@@ -2,6 +2,7 @@
 using GroupExpensesApp.Models;
 using GroupExpensesApp.Services;
 using GroupExpensesAppUnitTests;
+using Xunit;
 
 namespace GroupExpensesApp.Tests;
 
